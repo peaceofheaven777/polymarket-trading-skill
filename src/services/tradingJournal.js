@@ -1,258 +1,254 @@
 /**
- * Trading Journal - Self-Learning System
- * 
- * Based on: crypto-self-learning skill
- * Logs trades, analyzes patterns, generates rules
+ * Trading Journal & Loss Analyzer
+ * Tracks trades and learns from mistakes
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import fs from 'fs';
+import path from 'path';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = join(__dirname, '../../data');
-const TRADES_FILE = join(DATA_DIR, 'trades.json');
+const JOURNAL_FILE = './data/trading-journal.json';
+const LOSS_ANALYSIS_FILE = './data/loss-analysis.json';
 
-/**
- * Load trades from file
- */
-function loadTrades() {
-  try {
-    if (existsSync(TRADES_FILE)) {
-      const data = readFileSync(TRADES_FILE, 'utf-8');
-      return JSON.parse(data);
+// Initialize files
+function initJournal() {
+    if (!fs.existsSync('./data')) fs.mkdirSync('./data');
+    if (!fs.existsSync(JOURNAL_FILE)) {
+        fs.writeFileSync(JOURNAL_FILE, JSON.stringify({ trades: [], stats: { wins: 0, losses: 0, total: 0 } }));
     }
-  } catch (e) {
-    console.error('Error loading trades:', e.message);
-  }
-  return { trades: [], metadata: { created: new Date().toISOString() } };
+    if (!fs.existsSync(LOSS_ANALYSIS_FILE)) {
+        fs.writeFileSync(LOSS_ANALYSIS_FILE, JSON.stringify({ analyses: [], patterns: [] }));
+    }
 }
 
 /**
- * Save trades to file
+ * Record a trade
  */
-function saveTradesSync(data) {
-  try {
-    // Ensure directory exists
-    try {
-      mkdirSync(DATA_DIR, { recursive: true });
-    } catch (e) { /* ignore */ }
+export function recordTrade(trade) {
+    initJournal();
+    const journal = JSON.parse(fs.readFileSync(JOURNAL_FILE, 'utf8'));
     
-    data.metadata.updated = new Date().toISOString();
-    writeFileSync(TRADES_FILE, JSON.stringify(data, null, 2));
-    return true;
-  } catch (e) {
-    console.error('Error saving trades:', e.message);
-    return false;
-  }
+    const entry = {
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        asset: trade.asset, // BTC, ETH
+        direction: trade.direction, // UP, DOWN
+        entryPrice: trade.entryPrice,
+        outcome: trade.outcome, // 'win', 'loss'
+        pnl: trade.pnl || 0,
+        reason: trade.reason || {},
+        indicators: trade.indicators || {},
+        zScore: trade.zScore,
+        rsi: trade.rsi,
+        edge: trade.edge,
+        confidence: trade.confidence,
+        marketUp: trade.marketUp,
+        marketDown: trade.marketDown
+    };
+    
+    journal.trades.push(entry);
+    journal.stats.total++;
+    if (trade.outcome === 'win') journal.stats.wins++;
+    else journal.stats.losses++;
+    
+    fs.writeFileSync(JOURNAL_FILE, JSON.stringify(journal, null, 2));
+    
+    // Analyze if loss
+    if (trade.outcome === 'loss') {
+        analyzeLoss(entry);
+    }
+    
+    return entry;
 }
 
 /**
- * Log a trade with full context
+ * Analyze why a trade lost
  */
-export function logTrade(trade) {
-  const data = loadTrades();
-  
-  const newTrade = {
-    id: Date.now().toString(36),
-    timestamp: new Date().toISOString(),
-    symbol: trade.symbol?.toUpperCase() || 'BTCUSDT',
-    direction: trade.direction?.toUpperCase() || 'LONG',
-    entry: parseFloat(trade.entry),
-    exit: parseFloat(trade.exit),
-    pnl_percent: parseFloat(trade.pnl_percent),
-    result: trade.pnl_percent > 0 ? 'WIN' : 'LOSS',
-    leverage: trade.leverage || 1,
-    reason: trade.reason || '',
-    indicators: trade.indicators || {},
-    market_context: trade.market_context || {},
-    notes: trade.notes || '',
-    day_of_week: new Date().toLocaleDateString('en-US', { weekday: 'long' }),
-    hour: new Date().getHours()
-  };
-  
-  data.trades.push(newTrade);
-  saveTradesSync(data);
-  
-  return { success: true, trade: newTrade };
+function analyzeLoss(trade) {
+    const analysis = JSON.parse(fs.readFileSync(LOSS_ANALYSIS_FILE, 'utf8'));
+    
+    const reasons = [];
+    
+    // 1. Check if RSI was extreme (often reverses)
+    if (trade.rsi) {
+        if (trade.rsi < 25) reasons.push({ factor: 'RSI', issue: 'Oversold - likely bounce', severity: 'high' });
+        if (trade.rsi > 75) reasons.push({ factor: 'RSI', issue: 'Overbought - likely reverse', severity: 'high' });
+    }
+    
+    // 2. Check Z-Score - did we bet against trend?
+    if (trade.zScore) {
+        if (Math.abs(trade.zScore) > 0.25) {
+            if (trade.direction === 'UP' && trade.zScore < -0.25) {
+                reasons.push({ factor: 'Z-Score', issue: 'Bet UP but Z-Score negative (bearish)', severity: 'critical' });
+            }
+            if (trade.direction === 'DOWN' && trade.zScore > 0.25) {
+                reasons.push({ factor: 'Z-Score', issue: 'Bet DOWN but Z-Score positive (bullish)', severity: 'critical' });
+            }
+        }
+    }
+    
+    // 3. Check edge - was edge too low?
+    if (trade.edge && trade.edge < 0.08) {
+        reasons.push({ factor: 'Edge', issue: `Edge too low (${(trade.edge*100).toFixed(1)}%)`, severity: 'high' });
+    }
+    
+    // 4. Check confidence
+    if (trade.confidence && trade.confidence < 0.60) {
+        reasons.push({ factor: 'Confidence', issue: `Confidence too low (${(trade.confidence*100).toFixed(0)}%)`, severity: 'medium' });
+    }
+    
+    // 5. Check market sentiment vs bet
+    if (trade.marketUp && trade.marketDown) {
+        if (trade.direction === 'UP' && trade.marketDown > trade.marketUp) {
+            reasons.push({ factor: 'Market', issue: 'Market favoring DOWN but bet UP', severity: 'high' });
+        }
+        if (trade.direction === 'DOWN' && trade.marketUp > trade.marketDown) {
+            reasons.push({ factor: 'Market', issue: 'Market favoring UP but bet DOWN', severity: 'high' });
+        }
+    }
+    
+    // 6. EMA alignment
+    if (trade.indicators?.ema5 && trade.indicators?.ema15) {
+        const emaTrend = trade.indicators.ema5 > trade.indicators.ema15 ? 'bullish' : 'bearish';
+        if (trade.direction === 'UP' && emaTrend === 'bearish') {
+            reasons.push({ factor: 'EMA', issue: 'EMA bearish but bet UP', severity: 'medium' });
+        }
+        if (trade.direction === 'DOWN' && emaTrend === 'bullish') {
+            reasons.push({ factor: 'EMA', issue: 'EMA bullish but bet DOWN', severity: 'medium' });
+        }
+    }
+    
+    const entry = {
+        id: Date.now(),
+        timestamp: trade.timestamp,
+        tradeId: trade.id,
+        asset: trade.asset,
+        direction: trade.direction,
+        reasons: reasons,
+        summary: reasons.length > 0 ? reasons.map(r => r.factor).join(', ') : 'Unknown'
+    };
+    
+    analysis.analyses.push(entry);
+    
+    // Find patterns
+    const patterns = {};
+    for (const a of analysis.analyses) {
+        for (const r of a.reasons) {
+            if (!patterns[r.factor]) patterns[r.factor] = { count: 0, severity: {} };
+            patterns[r.factor].count++;
+            patterns[r.factor].severity[r.severity] = (patterns[r.factor].severity[r.severity] || 0) + 1;
+        }
+    }
+    analysis.patterns = Object.entries(patterns).map(([factor, data]) => ({ factor, ...data }));
+    
+    fs.writeFileSync(LOSS_ANALYSIS_FILE, JSON.stringify(analysis, null, 2));
+    
+    return entry;
 }
 
 /**
- * Analyze trade patterns
+ * Get recommendations for next trades based on past losses
  */
-export function analyzeTrades(filters = {}) {
-  const data = loadTrades();
-  let trades = data.trades || [];
-  
-  // Apply filters
-  if (filters.symbol) {
-    trades = trades.filter(t => t.symbol === filters.symbol);
-  }
-  if (filters.direction) {
-    trades = trades.filter(t => t.direction === filters.direction);
-  }
-  if (filters.minTrades) {
-    // Already filtered above
-  }
-  
-  if (trades.length === 0) {
-    return { success: false, message: 'No trades found' };
-  }
-  
-  // Calculate overall win rate
-  const wins = trades.filter(t => t.result === 'WIN').length;
-  const winRate = (wins / trades.length * 100).toFixed(1);
-  
-  // Analyze by direction
-  const byDirection = {};
-  for (const dir of ['LONG', 'SHORT']) {
-    const dirTrades = trades.filter(t => t.direction === dir);
-    if (dirTrades.length > 0) {
-      const dirWins = dirTrades.filter(t => t.result === 'WIN').length;
-      byDirection[dir] = {
-        trades: dirTrades.length,
-        wins: dirWins,
-        winRate: (dirWins / dirTrades.length * 100).toFixed(1)
-      };
+export function getRecommendations() {
+    initJournal();
+    const analysis = JSON.parse(fs.readFileSync(LOSS_ANALYSIS_FILE, 'utf8'));
+    const journal = JSON.parse(fs.readFileSync(JOURNAL_FILE, 'utf8'));
+    
+    const recommendations = [];
+    
+    // Analyze patterns
+    if (analysis.patterns) {
+        for (const pattern of analysis.patterns) {
+            if (pattern.count >= 2) {
+                switch (pattern.factor) {
+                    case 'Z-Score':
+                        recommendations.push({
+                            priority: 'HIGH',
+                            rule: 'NEVER bet against Z-Score direction when |z| > 0.25',
+                            reason: `Lost ${pattern.count} times betting against Z-Score`
+                        });
+                        break;
+                    case 'RSI':
+                        recommendations.push({
+                            priority: 'MEDIUM',
+                            rule: 'Avoid betting when RSI < 25 or RSI > 75 (extreme)',
+                            reason: `Lost ${pattern.count} times at RSI extremes`
+                        });
+                        break;
+                    case 'Edge':
+                        recommendations.push({
+                            priority: 'HIGH',
+                            rule: 'Require edge >= 8% (higher than 6%)',
+                            reason: `Lost ${pattern.count} times with low edge`
+                        });
+                        break;
+                    case 'EMA':
+                        recommendations.push({
+                            priority: 'MEDIUM',
+                            rule: 'Bet with EMA trend, not against',
+                            reason: `Lost ${pattern.count} times betting against EMA`
+                        });
+                        break;
+                    case 'Market':
+                        recommendations.push({
+                            priority: 'HIGH',
+                            rule: 'Follow market sentiment (the crowd)',
+                            reason: `Lost ${pattern.count} times fighting market`
+                        });
+                        break;
+                }
+            }
+        }
     }
-  }
-  
-  // Analyze by day of week
-  const byDay = {};
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  for (const day of days) {
-    const dayTrades = trades.filter(t => t.day_of_week === day);
-    if (dayTrades.length > 0) {
-      const dayWins = dayTrades.filter(t => t.result === 'WIN').length;
-      byDay[day] = {
-        trades: dayTrades.length,
-        wins: dayWins,
-        winRate: (dayWins / dayTrades.length * 100).toFixed(1)
-      };
+    
+    // Win rate by asset
+    const assetStats = {};
+    for (const trade of journal.trades) {
+        if (!assetStats[trade.asset]) assetStats[trade.asset] = { wins: 0, losses: 0 };
+        if (trade.outcome === 'win') assetStats[trade.asset].wins++;
+        else assetStats[trade.asset].losses++;
     }
-  }
-  
-  // Analyze by RSI range
-  const byRSI = {
-    oversold: { range: '<30', trades: 0, wins: 0 },
-    neutral: { range: '30-70', trades: 0, wins: 0 },
-    overbought: { range: '>70', trades: 0, wins: 0 }
-  };
-  
-  for (const trade of trades) {
-    const rsi = trade.indicators?.rsi;
-    if (rsi !== undefined) {
-      let bucket;
-      if (rsi < 30) bucket = 'oversold';
-      else if (rsi > 70) bucket = 'overbought';
-      else bucket = 'neutral';
-      
-      byRSI[bucket].trades++;
-      if (trade.result === 'WIN') byRSI[bucket].wins++;
+    
+    const winRates = Object.entries(assetStats).map(([asset, stats]) => ({
+        asset,
+        winRate: stats.wins / (stats.wins + stats.losses) * 100,
+        total: stats.wins + stats.losses
+    }));
+    
+    // Direction stats
+    const dirStats = { UP: { wins: 0, losses: 0 }, DOWN: { wins: 0, losses: 0 } };
+    for (const trade of journal.trades) {
+        if (trade.direction && dirStats[trade.direction]) {
+            if (trade.outcome === 'win') dirStats[trade.direction].wins++;
+            else dirStats[trade.direction].losses++;
+        }
     }
-  }
-  
-  for (const bucket of Object.keys(byRSI)) {
-    if (byRSI[bucket].trades > 0) {
-      byRSI[bucket].winRate = (byRSI[bucket].wins / byRSI[bucket].trades * 100).toFixed(1);
-    }
-  }
-  
-  // Calculate average P&L
-  const avgPnL = (trades.reduce((sum, t) => sum + t.pnl_percent, 0) / trades.length).toFixed(2);
-  
-  return {
-    success: true,
-    summary: {
-      totalTrades: trades.length,
-      wins: wins,
-      losses: trades.length - wins,
-      winRate: winRate + '%',
-      avgPnL: avgPnL + '%'
-    },
-    byDirection,
-    byDay,
-    byRSI
-  };
+    
+    const dirWinRates = Object.entries(dirStats).map(([dir, stats]) => ({
+        direction: dir,
+        winRate: stats.wins / (stats.wins + stats.losses) * 100 || 0,
+        total: stats.wins + stats.losses
+    }));
+    
+    return {
+        recommendations,
+        winRates,
+        dirWinRates,
+        totalStats: journal.stats,
+        patternCount: analysis.analyses.length
+    };
 }
 
 /**
- * Generate rules from trade history
+ * Get recent trades
  */
-export function generateRules() {
-  const analysis = analyzeTrades();
-  const rules = [];
-  
-  if (!analysis.success) {
-    return { success: false, rules: [], message: 'Not enough data' };
-  }
-  
-  // Check direction performance
-  for (const [dir, data] of Object.entries(analysis.byDirection)) {
-    if (data.trades >= 3) {
-      if (parseFloat(data.winRate) >= 60) {
-        rules.push({ type: 'PREFER', condition: `${dir} trades`, winRate: data.winRate, n: data.trades });
-      } else if (parseFloat(data.winRate) <= 40) {
-        rules.push({ type: 'AVOID', condition: `${dir} trades`, winRate: data.winRate, n: data.trades });
-      }
-    }
-  }
-  
-  // Check day performance
-  for (const [day, data] of Object.entries(analysis.byDay)) {
-    if (data.trades >= 3) {
-      if (parseFloat(data.winRate) >= 60) {
-        rules.push({ type: 'PREFER', condition: `Trades on ${day}`, winRate: data.winRate, n: data.trades });
-      } else if (parseFloat(data.winRate) <= 40) {
-        rules.push({ type: 'AVOID', condition: `Trades on ${day}`, winRate: data.winRate, n: data.trades });
-      }
-    }
-  }
-  
-  // Check RSI performance
-  for (const [bucket, data] of Object.entries(analysis.byRSI)) {
-    if (data.trades >= 3) {
-      if (parseFloat(data.winRate) >= 60) {
-        rules.push({ type: 'PREFER', condition: `RSI ${data.range}`, winRate: data.winRate, n: data.trades });
-      } else if (parseFloat(data.winRate) <= 40) {
-        rules.push({ type: 'AVOID', condition: `RSI ${data.range}`, winRate: data.winRate, n: data.trades });
-      }
-    }
-  }
-  
-  return { success: true, rules };
-}
-
-/**
- * Get statistics
- */
-export function getStats() {
-  const data = loadTrades();
-  const trades = data.trades || [];
-  
-  if (trades.length === 0) {
-    return { success: true, stats: { total: 0, wins: 0, losses: 0, winRate: '0%' } };
-  }
-  
-  const wins = trades.filter(t => t.result === 'WIN').length;
-  const totalPnL = trades.reduce((sum, t) => sum + t.pnl_percent, 0);
-  
-  return {
-    success: true,
-    stats: {
-      total: trades.length,
-      wins: wins,
-      losses: trades.length - wins,
-      winRate: (wins / trades.length * 100).toFixed(1) + '%',
-      totalPnL: totalPnL.toFixed(2) + '%',
-      avgPnL: (totalPnL / trades.length).toFixed(2) + '%'
-    }
-  };
+export function getRecentTrades(limit = 10) {
+    initJournal();
+    const journal = JSON.parse(fs.readFileSync(JOURNAL_FILE, 'utf8'));
+    return journal.trades.slice(-limit).reverse();
 }
 
 export default {
-  logTrade,
-  analyzeTrades,
-  generateRules,
-  getStats
+    recordTrade,
+    getRecommendations,
+    getRecentTrades
 };

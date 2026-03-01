@@ -31,6 +31,14 @@ Auto-trading skill untuk Polymarket dengan technical analysis lengkap.
 - ✅ Higher edge threshold for 50/50 markets
 - ✅ Z-Score guardrails (don't bet against trend if |z| ≥ 0.25)
 
+### Learn from Losses 🎯
+- ✅ Auto-record every trade (win/loss)
+- ✅ Analyze why each loss happened
+- ✅ Track patterns (Z-Score, RSI, EMA, Edge, Market)
+- ✅ Generate recommendations for next trades
+- ✅ Apply learned rules to prevent repeat mistakes
+- ✅ Win rate by asset & direction tracking
+
 ### Macro
 - ✅ Binance 1H candle data
 - ✅ Z-Score calculation
@@ -51,6 +59,7 @@ Auto-trading skill untuk Polymarket dengan technical analysis lengkap.
 | **Cut Loss** | -20% |
 | **Survival Floor** | $30 |
 | **Anti-Spam** | No duplicate bets on same market |
+| **Learning** | Auto-learn from losses |
 
 ---
 
@@ -137,14 +146,26 @@ node auto-both-15m-smart.js
 ```
 
 Bot akan:
-- Cek market 15-min BTC & ETH setiap cycle
-- Analisa teknikal (RSI, EMA, Z-Score, Trend Score)
-- Hitung edge dan confidence
-- **Cek kalau sudah ada posisi di market ini** (prevent spam)
-- Tempatkan bet kalau:
-  - Edge ≥6%
-  - Confidence ≥56%
-  - Belum ada posisi di market ini
+1. Cek market 15-min BTC & ETH setiap cycle
+2. Analisa teknikal (RSI, EMA, Z-Score, Trend Score)
+3. Hitung edge dan confidence
+4. **Cek learned recommendations** ( dari loss sebelumnya)
+5. **Cek kalau sudah ada posisi di market ini** (prevent spam)
+6. Tempatkan bet kalau:
+   - Edge ≥6%
+   - Confidence ≥56%
+   - Tidak ada learned rule yang blok
+   - Belum ada posisi di market ini
+
+### Cek Recommendations
+```bash
+node -e "import('./src/services/tradingJournal.js').then(m => console.log(JSON.stringify(m.getRecommendations(), null, 2)))"
+```
+
+### Cek Recent Trades
+```bash
+node -e "import('./src/services/tradingJournal.js').then(m => console.log(JSON.stringify(m.getRecentTrades(10), null, 2)))"
+```
 
 ### Cek Positions
 ```bash
@@ -164,6 +185,37 @@ node check-all-positions.js
 | Cut Loss | -20% |
 | Survival Floor | $30 |
 | **Anti-Spam** | ✅ Check existing positions |
+| **Learning** | ✅ Auto-learn from losses |
+
+---
+
+## How Learning Works
+
+### 1. Record Trade
+Setiap bet yang dipasang akan direkam dengan:
+- Asset (BTC/ETH)
+- Direction (UP/DOWN)
+- Entry price
+- Indicators (RSI, EMA, Z-Score, etc)
+- Edge & Confidence
+
+### 2. Analyze Loss
+Ketika posisi selesai (win/loss), system akan menganalisa:
+- Kalau RSI < 25 atau > 75 → oversold/overbought trap
+- Kalau |Z-Score| > 0.25 tapi bet melawan direction → fighting model
+- Kalau Edge < 8% → edge terlalu tipis
+- Kalau EMA trend berlawanan dengan bet → trend jumping
+- Kalau market sentiment berlawanan → fighting the crowd
+
+### 3. Generate Recommendations
+Dari pattern yang muncul, system akan:
+- Prioritas HIGH: Z-Score rule violations, Low edge
+- Prioritas MEDIUM: RSI extremes, EMA misalignment
+
+### 4. Apply to Next Trade
+Sebelum placing bet, bot akan:
+- Cek recommendations
+- Kalau ada HIGH priority rule violated → skip bet
 
 ---
 
@@ -188,7 +240,7 @@ node check-all-positions.js
 ```
 polymarket-trading-skill/
 ├── SKILL.md                    # Ini file
-├── README.md                   # Tutorial (same)
+├── README.md                   # Tutorial
 ├── .env.example               # Template environment
 ├── package.json                # Dependencies
 ├── auto-both-15m-smart.js     # Main trading bot
@@ -196,12 +248,15 @@ polymarket-trading-skill/
 └── src/
     ├── config/
     │   └── index.js           # Configuration
-    └── services/
-        ├── client.js           # Polymarket CLOB client
-        ├── taAnalyzer.js       # Technical analysis
-        ├── drakec48Model.js   # Z-Score model
-        ├── tradingJournal.js # Track trades & patterns
-        └── trendFollowing.js  # Trend detection
+    ├── services/
+    │   ├── client.js           # Polymarket CLOB client
+    │   ├── taAnalyzer.js       # Technical analysis
+    │   ├── drakec48Model.js   # Z-Score model
+    │   ├── tradingJournal.js # Track & learn from trades
+    │   ├── trendFollowing.js  # Trend detection
+    │   └── position.js        # Position tracking
+    └── utils/
+        └── logger.js           # Logging
 ```
 
 ---

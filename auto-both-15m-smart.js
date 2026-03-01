@@ -18,6 +18,7 @@ import { getClient, initClient } from './src/services/client.js';
 import axios from 'axios';
 import logger from './src/utils/logger.js';
 import { addPosition } from './src/services/position.js';
+import { recordTrade, getRecommendations } from './src/services/tradingJournal.js';
 
 // Stub for position redemption (not yet implemented)
 async function checkAndRedeemPositions() {
@@ -555,6 +556,27 @@ async function processMarket(asset, taFunc, findMarketFunc) {
     if (streak.direction === ta.direction && streak.count >= 3) {
         logger.warn(`⚠️ ${ta.direction} streak detected (${streak.count}x). Skipping to prevent trend exhaustion.`);
         return false;
+    }
+    
+    // Check learned recommendations before trading
+    const recs = getRecommendations();
+    if (recs.recommendations && recs.recommendations.length > 0) {
+        for (const rec of recs.recommendations) {
+            if (rec.priority === 'HIGH') {
+                // Check specific rules
+                if (rec.rule.includes('Z-Score') && Math.abs(ta.z) > 0.25) {
+                    const trendDirection = ta.z > 0 ? 'UP' : 'DOWN';
+                    if (ta.direction !== trendDirection) {
+                        logger.warn(`⚠️ LEARNED: Skipping ${ta.direction} bet due to Z-Score rule: ${rec.rule}`);
+                        return false;
+                    }
+                }
+                if (rec.rule.includes('Edge') && ta.edge < 0.08) {
+                    logger.warn(`⚠️ LEARNED: Edge too low per learned rule: ${rec.rule}`);
+                    return false;
+                }
+            }
+        }
     }
     
     const canTrade = adjustedConfidence >= 56 && edge >= 0.06;
