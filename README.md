@@ -7,8 +7,10 @@ Auto-trading skill untuk Polymarket dengan technical analysis lengkap.
 ### Trading
 - ✅ Polymarket 15-minute markets (BTC, ETH, etc)
 - ✅ Drakec48 Z-Score volatility model
+- ✅ **Minimum $5 per bet** (fixed)
+- ✅ **Anti-spam: no bet on same market twice**
 - ✅ Edge detection (≥6% threshold)
-- ✅ Confidence-based sizing
+- ✅ Confidence-based sizing (≥56%)
 - ✅ Auto-sell take profit (+20%) / cut loss (-20%)
 
 ### Technical Analysis (9 Indicators)
@@ -22,11 +24,33 @@ Auto-trading skill untuk Polymarket dengan technical analysis lengkap.
 - ✅ Volume analysis
 - ✅ ATR (volatility)
 
+### Advanced Features (v2.0)
+- ✅ Multi-timeframe analysis (1M, 15M, 1H)
+- ✅ Trend Score (0-6 based on momentum)
+- ✅ RSI filters (don't fade extremes)
+- ✅ Higher edge threshold for 50/50 markets
+- ✅ Z-Score guardrails (don't bet against trend if |z| ≥ 0.25)
+
 ### Macro
 - ✅ Binance 1H candle data
 - ✅ Z-Score calculation
 - ✅ Fair price estimation
 - ✅ Market sentiment
+
+---
+
+## Trading Rules
+
+| Parameter | Value |
+|-----------|-------|
+| **Min Bet** | $5 per trade |
+| **Max Positions** | 5 open positions |
+| **Min Confidence** | 56% |
+| **Min Edge** | 6% |
+| **Take Profit** | +20% |
+| **Cut Loss** | -20% |
+| **Survival Floor** | $30 |
+| **Anti-Spam** | No duplicate bets on same market |
 
 ---
 
@@ -114,9 +138,13 @@ node auto-both-15m-smart.js
 
 Bot akan:
 - Cek market 15-min BTC & ETH setiap cycle
-- Analisa teknikal (RSI, EMA, Z-Score)
+- Analisa teknikal (RSI, EMA, Z-Score, Trend Score)
 - Hitung edge dan confidence
-- Tempatkan bet kalau edge ≥6% dan confidence ≥56%
+- **Cek kalau sudah ada posisi di market ini** (prevent spam)
+- Tempatkan bet kalau:
+  - Edge ≥6%
+  - Confidence ≥56%
+  - Belum ada posisi di market ini
 
 ### Cek Positions
 ```bash
@@ -135,6 +163,7 @@ node check-all-positions.js
 | Take Profit | +20% |
 | Cut Loss | -20% |
 | Survival Floor | $30 |
+| **Anti-Spam** | ✅ Check existing positions |
 
 ---
 
@@ -170,11 +199,13 @@ polymarket-trading-skill/
     └── services/
         ├── client.js           # Polymarket CLOB client
         ├── taAnalyzer.js       # Technical analysis
-        └── drakec48Model.js   # Z-Score model
+        ├── drakec48Model.js   # Z-Score model
+        ├── tradingJournal.js # Track trades & patterns
+        └── trendFollowing.js  # Trend detection
 ```
 
 ---
 
 ## Disclaimer
 
- trading involves risk. Use at your own risk. Start with small amounts.
+Trading involves risk. Use at your own risk. Start with small amounts.

@@ -7,8 +7,10 @@ Auto-trading skill untuk Polymarket dengan technical analysis lengkap.
 ### Trading
 - ✅ Polymarket 15-minute markets (BTC, ETH, etc)
 - ✅ Drakec48 Z-Score volatility model
+- ✅ **Minimum $5 per bet** (fixed)
+- ✅ **Anti-spam: no bet on same market twice**
 - ✅ Edge detection (≥6% threshold)
-- ✅ Confidence-based sizing
+- ✅ Confidence-based sizing (≥56%)
 - ✅ Auto-sell take profit (+20%) / cut loss (-20%)
 
 ### Technical Analysis (9 Indicators)
@@ -22,63 +24,188 @@ Auto-trading skill untuk Polymarket dengan technical analysis lengkap.
 - ✅ Volume analysis
 - ✅ ATR (volatility)
 
+### Advanced Features (v2.0)
+- ✅ Multi-timeframe analysis (1M, 15M, 1H)
+- ✅ Trend Score (0-6 based on momentum)
+- ✅ RSI filters (don't fade extremes)
+- ✅ Higher edge threshold for 50/50 markets
+- ✅ Z-Score guardrails (don't bet against trend if |z| ≥ 0.25)
+
 ### Macro
 - ✅ Binance 1H candle data
 - ✅ Z-Score calculation
 - ✅ Fair price estimation
 - ✅ Market sentiment
 
-## Setup
+---
 
+## Trading Rules
+
+| Parameter | Value |
+|-----------|-------|
+| **Min Bet** | $5 per trade |
+| **Max Positions** | 5 open positions |
+| **Min Confidence** | 56% |
+| **Min Edge** | 6% |
+| **Take Profit** | +20% |
+| **Cut Loss** | -20% |
+| **Survival Floor** | $30 |
+| **Anti-Spam** | No duplicate bets on same market |
+
+---
+
+## Cara Install
+
+### Prerequisites
+- Node.js 18+
+- npm atau yarn
+- Polymarket account dengan USDC di Polygon
+
+### Step 1: Clone Repo
 ```bash
-# Install dependencies
+git clone https://github.com/peaceofheaven777/polymarket-trading-skill.git
 cd polymarket-trading-skill
+```
+
+### Step 2: Install Dependencies
+```bash
 npm install
+```
 
-# Configure .env
+### Step 3: Setup Environment
+```bash
 cp .env.example .env
-# Edit .env with your keys
+```
 
-# Run
+Edit file `.env` dengan credentials kamu:
+
+```env
+# Private key EOA (untuk signing transactions)
+PRIVATE_KEY=0xYourPrivateKeyWithout0x
+
+# Proxy wallet address (dari Polymarket)
+PROXY_WALLET_ADDRESS=0xYourProxyWalletAddress
+
+# Polygon RPC (pake free RPC atau your own)
+POLYGON_RPC_URL=https://polygon-rpc.com
+
+# Polymarket CLOB API (optional - auto-derived jika kosong)
+CLOB_API_KEY=
+CLOB_API_SECRET=
+CLOB_API_PASSPHRASE=
+
+# HTTP Proxy (optional - kalau perlu)
+PROXY_URL=
+```
+
+### Step 4: Cara Dapetin Credentials
+
+#### Private Key
+1. Buka MetaMask
+2. Klik 3 titik → Account Details → Export Private Key
+3. Copy (tanpa prefix `0x`)
+
+#### Proxy Wallet
+1. Buka https://polymarket.com/settings
+2. Cari "Proxy Wallet" atau "Trading Account"
+3. Copy address nya
+
+#### Polygon RPC (Free)
+```env
+# Pilih salah satu:
+POLYGON_RPC_URL=https://polygon-rpc.com
+# atau
+POLYGON_RPC_URL=https://polygon-bor-rpc.publicnode.com
+# atau
+POLYGON_RPC_URL=https://rpc-mainnet.matic.network
+```
+
+#### USDC.e ke Proxy Wallet
+1. Beli USDC di exchange (Binance, etc)
+2. Swap ke USDC.e di Polygon (https://app.polymarket.com/bridge)
+3. Transfer ke proxy wallet address kamu
+
+Minimal: $30 (survival floor)
+
+---
+
+## Cara Menjalankan
+
+### Mode Trading (Auto-Bet)
+```bash
 node auto-both-15m-smart.js
 ```
 
-## Environment Variables
+Bot akan:
+- Cek market 15-min BTC & ETH setiap cycle
+- Analisa teknikal (RSI, EMA, Z-Score, Trend Score)
+- Hitung edge dan confidence
+- **Cek kalau sudah ada posisi di market ini** (prevent spam)
+- Tempatkan bet kalau:
+  - Edge ≥6%
+  - Confidence ≥56%
+  - Belum ada posisi di market ini
 
-| Variable | Description |
-|----------|-------------|
-| PRIVATE_KEY | EOA private key |
-| PROXY_WALLET_ADDRESS | Polymarket proxy wallet |
-| POLYGON_RPC_URL | Polygon RPC |
-| CLOB_API_KEY | Polymarket CLOB API key |
-| CLOB_API_SECRET | API secret |
-| CLOB_API_PASSPHRASE | API passphrase |
-| PROXY_URL | HTTP proxy (optional) |
-
-## Files
-
-| File | Purpose |
-|------|---------|
-| `auto-both-15m-smart.js` | Main trading bot |
-| `src/services/taAnalyzer.js` | Technical analysis |
-| `src/services/drakec48Model.js` | Z-Score model |
-| `src/services/client.js` | Polymarket CLOB client |
-
-## Usage
-
+### Cek Positions
 ```bash
-# Start trading
-node auto-both-15m-smart.js
-
-# Check positions
 node check-all-positions.js
 ```
 
+---
+
 ## Risk Management
 
-- Min confidence: 56%
-- Min edge: 6%
-- Max positions: 5
-- Take profit: +20%
-- Cut loss: -20%
-- Survival floor: $30
+| Parameter | Value |
+|-----------|-------|
+| Min Confidence | 56% |
+| Min Edge | 6% |
+| Max Positions | 5 |
+| Take Profit | +20% |
+| Cut Loss | -20% |
+| Survival Floor | $30 |
+| **Anti-Spam** | ✅ Check existing positions |
+
+---
+
+## Troubleshooting
+
+### "Not enough balance/allowance"
+- Cek USDC.e balance di proxy wallet
+- Atau approve USDC.e ke proxy
+
+### "Could not create api key"
+- Coba isi CLOB_API_KEY, CLOB_API_SECRET, CLOB_API_PASSPHRASE manual
+- Atau biarkan kosong — bot akan derive sendiri
+
+### "Connection timeout"
+- Coba ganti POLYGON_RPC_URL
+- Atau tambah PROXY_URL
+
+---
+
+## Struktur Files
+
+```
+polymarket-trading-skill/
+├── SKILL.md                    # Ini file
+├── README.md                   # Tutorial (same)
+├── .env.example               # Template environment
+├── package.json                # Dependencies
+├── auto-both-15m-smart.js     # Main trading bot
+├── check-all-positions.js     # Cek positions
+└── src/
+    ├── config/
+    │   └── index.js           # Configuration
+    └── services/
+        ├── client.js           # Polymarket CLOB client
+        ├── taAnalyzer.js       # Technical analysis
+        ├── drakec48Model.js   # Z-Score model
+        ├── tradingJournal.js # Track trades & patterns
+        └── trendFollowing.js  # Trend detection
+```
+
+---
+
+## Disclaimer
+
+Trading involves risk. Use at your own risk. Start with small amounts.

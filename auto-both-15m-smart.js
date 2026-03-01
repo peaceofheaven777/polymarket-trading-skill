@@ -406,8 +406,33 @@ async function findETHMarket() {
     }
 }
 
+// ============ CHECK IF ALREADY BET ON THIS MARKET ============
+function hasExistingPosition(conditionId) {
+    try {
+        const POSITIONS_FILE = './data/positions.json';
+        if (!fs.existsSync(POSITIONS_FILE)) return false;
+        const positions = JSON.parse(fs.readFileSync(POSITIONS_FILE, 'utf8'));
+        // Check if any position is for this conditionId and still open
+        for (const [key, pos] of Object.entries(positions)) {
+            if (pos.conditionId === conditionId && pos.status === 'open') {
+                return true;
+            }
+        }
+        return false;
+    } catch (e) {
+        return false;
+    }
+}
+
 // ============ PLACE BET ============
 async function placeBet(direction, market) {
+    // Check if already bet on this market
+    const conditionId = market.conditionId || market.clobTokenIds?.[0] || 'unknown';
+    if (hasExistingPosition(conditionId)) {
+        logger.warn(`Already have position for this market: ${conditionId}`);
+        return false;
+    }
+    
     await initClient();
     const client = getClient();
     
